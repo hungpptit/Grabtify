@@ -13,9 +13,10 @@ const baseUploadDir = path.join(__dirname, 'public', 'assets');
 const trackImageDir = path.join(baseUploadDir, 'track_image');
 const trackAudioDir = path.join(baseUploadDir, 'track_audio');
 const playlistImageDir = path.join(baseUploadDir, 'playlist_image');
+const userImageDir = path.join(baseUploadDir, 'user_image');
 
 // Tạo các thư mục nếu chưa tồn tại
-for (const dir of [trackImageDir, trackAudioDir, playlistImageDir]) {
+for (const dir of [trackImageDir, trackAudioDir, playlistImageDir, userImageDir]) {
     if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
         console.log(`Created upload directory: ${dir}`);
@@ -60,12 +61,15 @@ const createImageUploader = (uploadDir, prefix = 'image') => {
         limits: { fileSize: 20 * 1024 * 1024 } // 20MB
     });
 };
+const uploadUserImage = createImageUploader(userImageDir, 'user-avatar').single('userImage');
+
 
 // Middleware upload nhiều loại file (audio + image) cho track
 const uploadTrackFields = multer({
     storage: multer.diskStorage({
         destination: function (req, file, cb) {
             const dir = file.fieldname === 'audio' ? trackAudioDir : trackImageDir;
+            console.log(trackAudioDir, trackImageDir);
             cb(null, dir);
         },
         filename: function (req, file, cb) {
@@ -86,5 +90,6 @@ const uploadTrackImage = createImageUploader(trackImageDir, 'track-cover').singl
 export {
     uploadPlaylistImage,
     uploadTrackImage,
-    uploadTrackFields
+    uploadTrackFields,
+    uploadUserImage 
 };

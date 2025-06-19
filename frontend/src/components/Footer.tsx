@@ -1,17 +1,26 @@
-import React from "react";
+import React, { useEffect, useRef } from "react";
 // Import hook và kiểu dữ liệu trả về của nó
 import useFooterAudioPlayer, { UseFooterAudioPlayerReturn } from "../hooks/FooterAudioPlayer"; 
 // Import kiểu Song nếu cần (hoặc dùng Song từ GlobalAudioManager)
-import { Song } from "../hooks/GlobalAudioManager"; 
+import GlobalAudioManager, { Song } from "../hooks/GlobalAudioManager"; 
 import "../styles/Footer.css";
+import  { RepeatButton, ShuffleButton } from './modeControl';
+import { useNavigate } from "react-router-dom";
+import VolumeControl from "./VolumeControl";
+import { trackingListeningHistoryAPI } from "../services/listeningService";
+import { encodeBase62WithPrefix } from "../hooks/base62";
+
 
 // Interface cho FooterLeft (có thể giữ nguyên hoặc điều chỉnh)
 interface FooterLeftProps {
   // Nhận toàn bộ đối tượng song hoặc các thuộc tính riêng lẻ
   song: Song | null; // Cho phép null
+  onTitleClick?: () => void;
 }
 
-const FooterLeft: React.FC<FooterLeftProps> = ({ song }) => {
+const FooterLeft: React.FC<FooterLeftProps> = ({ song, onTitleClick  }) => {
+  
+  
   // Xử lý trường hợp song là null
   if (!song) {
     return (
@@ -30,20 +39,29 @@ const FooterLeft: React.FC<FooterLeftProps> = ({ song }) => {
     );
   }
 
+ 
+
+  // test xem có id ko 
+  //  console.log(song.id);
+
   // Render khi có song
   return (
+  
     <div className="footer-left">
       <div className="playing-song">
         <img src={song.cover || "/assets/anhmau.png"} alt={song.title || 'Song cover'} />
       </div>
       <div className="title-playing-song">
-        <p className="song-title">{song.title || 'Unknown Title'}</p>
+       <p className="song-title" onClick={onTitleClick} style={{ cursor: 'pointer' }}>
+          {song.title || 'Unknown Title'}
+        </p>
         <p className="song-artist">{song.artist || 'Unknown Artist'}</p>
       </div>
       <button className="btn-DC">
         <img src="/assets/plus.png" alt="Add" />
       </button>
     </div>
+    
   );
 };
 
@@ -53,6 +71,11 @@ interface MusicControlsProps {
   togglePlay: () => void;
   playNext: () => void;    // <<< Sửa tên thành playNext
   playPrevious: () => void; // <<< Sửa tên thành playPrevious
+
+  repeatMode: 'off' | 'one' | 'all';
+  isShuffle: boolean;
+  toggleRepeat: () => void;
+  toggleShuffle: () => void;
 }
 
 const MusicControls: React.FC<MusicControlsProps> = ({
@@ -60,12 +83,14 @@ const MusicControls: React.FC<MusicControlsProps> = ({
   togglePlay,
   playNext,     // <<< Sửa tên thành playNext
   playPrevious, // <<< Sửa tên thành playPrevious
+  repeatMode,        // 👈 thêm dòng này
+  isShuffle,         // 👈 thêm dòng này
+  toggleRepeat,      // 👈 và dòng này
+  toggleShuffle, 
 }) => {
   return (
     <div className="music-controls">
-      <button className="shuffle">
-        <img src="/assets/shuffle.png" alt="Shuffle" />
-      </button>
+      <ShuffleButton isActive={isShuffle} onToggle={toggleShuffle} />
       {/* Gọi đúng hàm playPrevious */}
       <button className="prev" onClick={playPrevious}> 
         <img src="/assets/prev.png" alt="Previous" />
@@ -77,9 +102,8 @@ const MusicControls: React.FC<MusicControlsProps> = ({
       <button className="next" onClick={playNext}> 
         <img src="/assets/next.png" alt="Next" />
       </button>
-      <button className="repeat">
-        <img src="/assets/loop.png" alt="Repeat" />
-      </button>
+      <RepeatButton mode={repeatMode} onToggle={toggleRepeat} />
+
     </div>
   );
 };
@@ -141,27 +165,79 @@ const Footer: React.FC = () => {
     duration,
     progress,    // Lấy progress trực tiếp từ hook
     seekTo,      // Hàm seekTo từ hook nhận percent (0-100)
+    repeatMode,          // 👈 Thêm dòng này
+    isShuffle,           // 👈 Thêm dòng này
+    toggleRepeat,        // 👈 Thêm dòng này
+    toggleShuffle,       // 👈 Thêm dòng này
+    audioRef, 
+    volume, 
+    setVolume  
   }: UseFooterAudioPlayerReturn = useFooterAudioPlayer();
+
+  // console.log("👈👈👈👈[Footer] render", {
+  //   currentSong,
+  //   isPlaying,
+  //   repeatMode,
+  //   isShuffle
+  // });
   // -----------------------------------------
+  const lastTrackedId = useRef<number | string | undefined>(undefined);
 
-  // Hàm formatTime có thể để ở đây hoặc trong ProgressBar
-  // const formatTime = ... (Đã chuyển vào ProgressBar)
+   useEffect(() => {
+    // Chỉ gọi tracking khi có bài hát mới được play (chuyển bài, hoặc lần đầu vào player)
+    if (
+      currentSong?.id &&
+      isPlaying &&
+      currentSong.id !== lastTrackedId.current
+    ) {
+      trackingListeningHistoryAPI(currentSong.id)
+        .catch(() => { /* ignore */ });
+      lastTrackedId.current = currentSong.id;
+    }
+    // Không reset lastTrackedId khi pause, chỉ reset khi đổi sang bài khác!
+  }, [currentSong?.id, isPlaying]);
+  const navigate = useNavigate();
 
-  // progress đã được tính trong hook, không cần tính lại
-  // const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+const goToManagerSong = () => {
+  if (!currentSong) return;
+
+  const playlist = GlobalAudioManager.getPlaylist();
+  const index = playlist.findIndex((s) => s.id === currentSong.id);
+  if (index === -1) return;
+
+  localStorage.setItem("viewedSong", JSON.stringify(currentSong));
+  localStorage.setItem("viewedPlaylist", JSON.stringify(playlist));
+  localStorage.setItem("viewedIndex", index.toString());
+
+  const encodedId = encodeBase62WithPrefix(Number(currentSong.id), 22);
+
+  navigate(`/ManagerSong/${encodedId}`, {
+    state: {
+      songs: playlist,
+      currentIndex: index,
+      currentSong: currentSong,
+      context: { id: `footer-${currentSong.id}`, type: "queue" },
+       _forceKey: Date.now(), // 🔥 ép state thay đổi để trigger re-render
+    },
+  });
+};
+
+  
+
+
 
   // Hàm handleSeek giờ chỉ cần gọi seekTo từ hook với phần trăm
   const handleSeek = (percent: number) => {
     seekTo(percent);
   };
 
-  // Phần render khi không có bài hát (có thể giữ nguyên hoặc dùng FooterLeft)
-  // if (!currentSong) { ... } // Có thể dùng trực tiếp FooterLeft với song={null}
+
 
   return (
     <footer className="footer">
       {/* Truyền currentSong vào FooterLeft */}
-      <FooterLeft song={currentSong} /> 
+      <FooterLeft song={currentSong} onTitleClick={goToManagerSong} />
+
       <div className="music-player">
         {/* Truyền đúng tên hàm vào MusicControls */}
         <MusicControls
@@ -169,6 +245,10 @@ const Footer: React.FC = () => {
           togglePlay={togglePlay}
           playNext={playNext}       // <<< Sửa tên
           playPrevious={playPrevious} // <<< Sửa tên
+          repeatMode={repeatMode}             // 👈 thêm
+          isShuffle={isShuffle}               // 👈 thêm
+          toggleRepeat={toggleRepeat}         // 👈 thêm
+          toggleShuffle={toggleShuffle}       // 👈 thêm
         />
         <ProgressBar
           currentTime={currentTime} // Truyền number
@@ -178,6 +258,9 @@ const Footer: React.FC = () => {
         />
       </div>
       {/* Phần Volume Control và các phần khác có thể thêm vào đây */}
+      <div className="footer-right-progress">
+        <VolumeControl audioRef={audioRef} volume={volume} setVolume={setVolume} />
+      </div>
     </footer>
   );
 };

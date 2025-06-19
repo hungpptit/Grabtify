@@ -1,14 +1,14 @@
-import { useEffect, useState, useRef, useCallback } from "react"; // Import useRef
+import { useEffect, useState, useRef } from "react"; // Import useRef
 import * as React from 'react';
 
 import { useNavigate } from "react-router-dom";
 // Import hook xử lý waveform và play track
 import handlePlayTrack, { initFirstWaveforms } from "../../hooks/Manager_Playlist"; // Ensure this imports the refactored version
 // Import hàm API để lấy playlist từ server
-import { getMyPlaylistsAPI } from "../../services/playlistService";
+import { getMyPlaylistsAPI,getPublicPlaylistsByUserIdAPI } from "../../services/playlistService";
 // Import kiểu dữ liệu
 // Định nghĩa kiểu TrackItem (giữ nguyên)
-interface TrackItem {
+export interface TrackItem {
     id: number | string;
     title: string;
     src: string;
@@ -17,7 +17,7 @@ interface TrackItem {
     imageUrl?: string | null;
 }
 // Định nghĩa kiểu PlaylistData (giữ nguyên)
-interface PlaylistData {
+export interface PlaylistData {
     id: number;
     title: string;
     artist: string;
@@ -27,9 +27,10 @@ interface PlaylistData {
     imageUrl?: string | null;
 }
 
-// --- THÊM BASE URL CỦA BACKEND ---
-
-// ---------------------------------
+interface PlaylistsProps {
+  viewedUserId: string | number;  // ID của profile đang xem
+  currentUserId: string | number ; // ID của người đang đăng nhập
+}
 
 
 // SVG Paths (Giữ nguyên)
@@ -37,7 +38,7 @@ const svgIconMusicNote = "M6 3h15v15.167a3.5 3.5 0 1 1-3.5-3.5H19V5H8v13.167a3.5
 const svgIconEdit = "M17.318 1.975a3.329 3.329 0 1 1 4.707 4.707L8.451 20.256c-.49.49-1.082.867-1.735 1.103L2.34 22.94a1 1 0 0 1-1.28-1.28l1.581-4.376a4.726 4.726 0 0 1 1.103-1.735L17.318 1.975zm3.293 1.414a1.329 1.329 0 0 0-1.88 0L5.159 16.963c-.283.283-.5.624-.636 1l-.857 2.372 2.371-.857a2.726 2.726 0 0 0 1.001-.636L20.611 5.268a1.329 1.329 0 0 0 0-1.879z";
 
 
-const Playlist: React.FC = () => {
+const Playlist: React.FC<PlaylistsProps> = ({ viewedUserId, currentUserId }) => {
     // State cho playlists, loading và error (Giữ nguyên)
     const [playlists, setPlaylists] = useState<PlaylistData[]>([]);
     const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -51,41 +52,7 @@ const Playlist: React.FC = () => {
     const [imageErrorMap, setImageErrorMap] = useState<Record<number, boolean>>({});
     const [hoveringIconMap, setHoveringIconMap] = useState<Record<number, boolean>>({});
 
-    // Hàm fetch playlists (Giữ nguyên)
-    const fetchPlaylists = useCallback(async () => {
-        console.log("Playlist Component: Fetching playlists...");
-        setIsLoading(true);
-        setError(null);
-        setImageErrorMap({});
-        setHoveringIconMap({});
-        try {
-            const fetchedPlaylists = await getMyPlaylistsAPI();
-            console.log("Playlist Component: Fetched playlists data:", fetchedPlaylists);
-            if (Array.isArray(fetchedPlaylists)) {
-                 setPlaylists(fetchedPlaylists as PlaylistData[]);
-                 playlistContainerRefs.current = fetchedPlaylists.map(() => null);
-            } else {
-                 console.error("Playlist Component: Fetched data is not an array:", fetchedPlaylists);
-                 setError("Dữ liệu playlist nhận được không hợp lệ.");
-                 setPlaylists([]);
-            }
-        } catch (err: any) {
-            console.error("Playlist Component: Error fetching playlists:", err);
-            if (err.message === 'Unauthorized') {
-                setError("Vui lòng đăng nhập để xem playlist.");
-            } else {
-                setError("Không thể tải danh sách playlist. Vui lòng thử lại sau.");
-            }
-             setPlaylists([]);
-        } finally {
-            setIsLoading(false);
-        }
-    }, []);
 
-    // useEffect fetch lần đầu (Giữ nguyên)
-    useEffect(() => {
-        fetchPlaylists();
-    }, [fetchPlaylists]);
 
     // useEffect khởi tạo waveform (Giữ nguyên)
     useEffect(() => {
@@ -101,6 +68,35 @@ const Playlist: React.FC = () => {
             return () => clearTimeout(initTimer);
         }
     }, [playlists, isLoading, error]);
+
+    useEffect(() => {
+        const fetchPlaylists = async () => {
+            setIsLoading(true);
+            setError(null);
+            try {
+            let fetchedPlaylists: PlaylistData[] = [];
+
+            if (viewedUserId === currentUserId) {
+                // Chủ profile xem playlist của chính mình
+                fetchedPlaylists = await getMyPlaylistsAPI();
+            } else {
+                // Người khác xem profile => chỉ lấy playlist public của người đó
+                fetchedPlaylists = await getPublicPlaylistsByUserIdAPI(viewedUserId);
+            }
+
+            setPlaylists(fetchedPlaylists);
+            playlistContainerRefs.current = fetchedPlaylists.map(() => null);
+            } catch (err: any) {
+            setError(err.message || "Lỗi khi tải danh sách playlist.");
+            setPlaylists([]);
+            } finally {
+            setIsLoading(false);
+            }
+        };
+
+        fetchPlaylists();
+    }, [viewedUserId, currentUserId]);
+
 
     // Hàm xử lý lỗi ảnh (Giữ nguyên)
     const handleImageError = (playlistId: number) => {
@@ -185,17 +181,21 @@ const Playlist: React.FC = () => {
                                         {/* Kiểm tra playlist.tracks là mảng */}
                                         {Array.isArray(playlist.tracks) && playlist.tracks.map((track, trackIndex) => (
                                             <div
-                                                className="track-item" // Giữ lại class gốc
+                                                className="track-item-profile" // Giữ lại class gốc
                                                 key={track.id || trackIndex}
                                                 onClick={() => {
                                                     const containerElement = playlistContainerRefs.current[playlistIndex];
-                                                    handlePlayTrack(track, playlist, containerElement);
+                                                    handlePlayTrack(track, playlist, containerElement, {
+                                                        id: `playlist_profile_${playlist.id}`,
+                                                        type: "playlist"
+                                                    });
+
                                                 }}
                                                 title={`Play: ${track.title}`}
                                             >
                                                 {/* Giữ lại cấu trúc cũ với track-number và track-content */}
                                                 <div className="track-number">{trackIndex + 1}</div>
-                                                <div className="track-content">
+                                                <div className="track-content-playlist">
                                                     <div className="track-text">
                                                         <span>{track.title}</span>
                                                         {/* Có thể thêm artist của track nếu cần */}

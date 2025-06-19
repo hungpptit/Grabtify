@@ -1,4 +1,4 @@
-// D:\web_html\gop\grapfity\backend\src\models\track.js
+// src/models/track.js
 'use strict';
 import { Model } from 'sequelize';
 
@@ -7,8 +7,6 @@ export default (sequelize, DataTypes) => {
     static associate(models) {
       Track.belongsTo(models.User, {
         foreignKey: 'uploaderId',
-        onDelete: 'CASCADE',
-        onUpdate: 'CASCADE'
       });
 
       Track.belongsToMany(models.Playlist, {
@@ -22,13 +20,11 @@ export default (sequelize, DataTypes) => {
       });
 
       Track.hasMany(models.listeningHistory, {
-        foreignKey: 'trackId'
+        foreignKey: 'trackId',
       });
 
       Track.hasOne(models.Metadata, {
         foreignKey: 'track_id',
-        onDelete: 'CASCADE',
-        onUpdate: 'CASCADE'
       });
     }
   }
@@ -37,12 +33,12 @@ export default (sequelize, DataTypes) => {
     trackUrl: DataTypes.STRING,
     imageUrl: DataTypes.STRING,
     uploaderId: DataTypes.INTEGER,
-    status: {
+    privacy: {
       type: DataTypes.STRING,
       allowNull: false,
-      defaultValue: 'pending',
+      defaultValue: 'public',
       validate: {
-        isIn: [['pending', 'approved', 'rejected']]
+        isIn: [['public', 'private']]
       }
     }
   }, {
@@ -51,9 +47,14 @@ export default (sequelize, DataTypes) => {
   });
 
   Track.addHook('afterDestroy', async (track, options) => {
-    const {Track} = sequelize.models;
-    await Track.destroy({ where: { id: track.id }, transaction: options.transaction});
-  })
+    const { Like, listeningHistory, Metadata, PlaylistTrack } = sequelize.models;
+
+    await PlaylistTrack.destroy({ where: { trackId: track.id }, transaction: options.transaction });
+    await Like.destroy({ where: { trackId: track.id }, transaction: options.transaction });
+    await listeningHistory.destroy({ where: { trackId: track.id }, transaction: options.transaction });
+    await Metadata.destroy({ where: { track_id: track.id }, transaction: options.transaction });
+  });
+
 
   return Track;
 };

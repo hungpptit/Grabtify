@@ -1,5 +1,6 @@
-import  { useEffect } from 'react'; 
-import { Routes, Route, Navigate } from "react-router-dom"; 
+import  { useEffect, useState } from 'react'; 
+import { Routes, Route, Navigate, useParams } from "react-router-dom"; 
+import { getCurrentUser } from "./services/authService";
 
 import Homepage from "./container/HomePage";
 // import Profile from "./container/ProfilePage";
@@ -12,7 +13,6 @@ import ManagerPlaylistLayout from "./layouts/ManagerPlaylistLayout";
 import SeeMoreLayouts from "./layouts/SeeMoreLayouts";
 import TopArtistsLisPage from "./container/TopArtistsLisPage";
 import TopTracksLisPage from "./container/TopTracksLisPage";
-import TopGenresLisPage from "./container/TopGenresLisPage";
 import TopTracksPage from "./container/TopTracksPage";
 
 import UploadLayouts from "./layouts/UploadLayouts";
@@ -22,6 +22,7 @@ import ListeningLayouts from "./layouts/ListeningLayouts";
 import LoginForm from "./container/Login";
 import LoginLayout from "./layouts/LoginLayouts";
 import SearchPage from "./container/SearchPage";
+import ManagerSongSection from "./components/ManagerSongSection";
 
 // Import GlobalAudioManager và các kiểu dữ liệu/API cần thiết
 import GlobalAudioManager, { PlaylistContext, Song } from './hooks/GlobalAudioManager';
@@ -32,7 +33,27 @@ import { getTracksInPlaylistAPI } from './services/trackPlaylistService';
 import { PlaylistData } from './components/Manager_Playlists/ManagerDataPlaylist';
 // ----------------------------------------------------
 import { getAllTracksAPI} from './services/trackServiceAPI';
+import { getLikedTracksByProfileAPI } from './services/likeService';
+import { getMyPlaylistsAPI } from './services/playlistService';
 
+
+
+export function useProfileUserId(): string | number | null {
+  const { userId: profileUserId } = useParams<{ userId: string }>();
+  const [currentUserId, setCurrentUserId] = useState<string | number | null>(null);
+
+  useEffect(() => {
+    if (!profileUserId && !currentUserId) {
+      getCurrentUser().then(user => {
+        if (user?.id) {
+          setCurrentUserId(user.id);
+        }
+      });
+    }
+  }, [profileUserId]);
+
+  return profileUserId || currentUserId;
+}
 // Hàm tiện ích map từ TrackData (hoặc cấu trúc track trong PlaylistData) sang Song
 const mapTrackDataToSong = (track: any): Song => ({ 
     id: track.id, 
@@ -43,42 +64,142 @@ const mapTrackDataToSong = (track: any): Song => ({
 });
 
 
+import AdminLayout from "./layouts/adminlayouts"
+import Section_admin from "./components/section_admin"
+import Section_admin_tracks from "./components/section_admin_tracks"
+import Section_admin_users from "./components/section_admin_users"
+import Section_admin_profile from "./components/section_admin_statistical"
+
+
 const App = () => {
+ const viewedUserId = useProfileUserId(); // lấy user trước
+
+  // useEffect(() => {
+  //   if (!viewedUserId) return; // chưa có user → không gọi
+
+  //   const fetchPlaylist = async (context: PlaylistContext): Promise<Song[] | null> => {
+  //     try {
+  //       if (!context?.type || !context?.id) return null;
+
+  //       if (context.type === 'playlist') {
+  //         if (typeof context.id === 'string' && context.id.startsWith('playlist_profile_')) {
+  //           const rawId = context.id.replace('playlist_profile_', '');
+  //           const allPlaylists = await getMyPlaylistsAPI();
+  //           const matched = allPlaylists.find(p => String(p.id) === rawId);
+  //           if (!matched) return null;
+  //           return matched.tracks.map(mapTrackDataToSong);
+  //         }
+
+  //         const playlistData: PlaylistData | null = await getTracksInPlaylistAPI(Number(context.id));
+  //         return playlistData?.tracks?.map(mapTrackDataToSong) || null;
+  //       }
+
+  //       if (context.type === 'profile' && context.id === 'liked') {
+  //         const likedTrackData = await getLikedTracksByProfileAPI(viewedUserId);
+  //         return likedTrackData.map(mapTrackDataToSong);
+  //       }
+
+  //       if (context.type === 'queue') {
+  //         const allTrackData = await getAllTracksAPI();
+  //         return allTrackData.map(mapTrackDataToSong);
+  //       }
+
+  //       if (context.type === 'waveform') {
+  //         const rawSongs = localStorage.getItem(waveformPlaylist_${context.id});
+  //         if (!rawSongs) return null;
+  //         return JSON.parse(rawSongs) as Song[];
+  //       }
+
+  //       return null;
+  //     } catch {
+  //       return null;
+  //     }
+  //   };
+    
+  //   GlobalAudioManager.loadInitialState(fetchPlaylist);
+  // }, [viewedUserId]); // chỉ gọi khi đã có user
 
   useEffect(() => {
-    const fetchPlaylist = async (context: PlaylistContext): Promise<Song[] | null> => {
-      console.log("[App Init] Attempting to fetch playlist for saved context:", context);
-      try {
-        let fetchedSongs: Song[] = [];
-        // --- SỬA LẠI: Dùng getTracksInPlaylistAPI ---
-        if ((context.type === 'playlist' || context.type === 'album') && context.id) {
-          // Gọi hàm getTracksInPlaylistAPI để lấy chi tiết playlist
-          const playlistData: PlaylistData | null = await getTracksInPlaylistAPI(context.id); 
-          // Ánh xạ từ tracks trong playlistData (nếu tồn tại) sang Song[]
-          // Đảm bảo mapApiDataToPlaylistData trong service đã xử lý đúng để playlistData có tracks
-          fetchedSongs = playlistData?.tracks?.map(mapTrackDataToSong) || []; 
-          console.log(`[App Init] Fetched ${fetchedSongs.length} songs using getTracksInPlaylistAPI for ID: ${context.id}`);
-        // ---------------------------------------------
-        } else if (context.type === 'waveform' || context.type === 'queue') {
-          console.log(`[App Init] Fetching all tracks for context type: ${context.type}, ID: ${context.id}`);
-          const allTrackData = await getAllTracksAPI(); 
-          fetchedSongs = allTrackData.map(mapTrackDataToSong);
-          console.log(`[App Init] Fetched ${fetchedSongs.length} total songs for ${context.type}`);
-        } else {
-            console.warn(`[App Init] Unhandled context type or missing ID:`, context);
+    console.log("🧪 viewedUserId in App.tsx:", viewedUserId); // ← Thêm dòng này
+  if (!viewedUserId) return;
+
+  const fetchPlaylist = async (context: PlaylistContext): Promise<Song[] | null> => {
+    try {
+      console.log("🔍 fetchPlaylist CALLED with context:", context);
+
+      if (!context?.type || !context?.id) {
+        console.warn("❌ Invalid context:", context);
+        return null;
+      }
+
+      if (context.type === 'playlist') {
+        if (typeof context.id === 'string' && context.id.startsWith('playlist_profile_')) {
+          const rawId = context.id.replace('playlist_profile_', '');
+          const allPlaylists = await getMyPlaylistsAPI();
+          const matched = allPlaylists.find(p => String(p.id) === rawId);
+          console.log("🎯 Matched profile playlist:", matched);
+          if (!matched) return null;
+          return matched.tracks.map(mapTrackDataToSong);
         }
 
-        return fetchedSongs.length > 0 ? fetchedSongs : null; 
-      } catch (error) {
-        console.error("[App Init] Error fetching playlist for initial state:", error);
-        return null; 
+        const playlistData: PlaylistData | null = await getTracksInPlaylistAPI(Number(context.id));
+        console.log("🎯 Playlist from API:", playlistData);
+        return playlistData?.tracks?.map(mapTrackDataToSong) || null;
       }
-    };
 
-    console.log("[App Init] Calling GlobalAudioManager.loadInitialState...");
-    GlobalAudioManager.loadInitialState(fetchPlaylist);
+      if (context.type === 'profile' && context.id === 'liked') {
+        const likedTrackData = await getLikedTracksByProfileAPI(viewedUserId);
+        console.log("💖 Liked tracks:", likedTrackData);
+        return likedTrackData.map(mapTrackDataToSong);
+      }
 
-  }, []); 
+      if (context.type === 'queue') {
+        const allTrackData = await getAllTracksAPI();
+        console.log("📦 All tracks (queue):", allTrackData);
+        return allTrackData.map(mapTrackDataToSong);
+      }
+
+      if (context.type === 'waveform') {
+        const rawSongs = localStorage.getItem(`waveformPlaylist_${context.id}`);
+        console.log("📊 Waveform rawSongs:", rawSongs);
+        if (!rawSongs) return null;
+        return JSON.parse(rawSongs) as Song[];
+      }
+      if (context.type === 'search') {
+        const raw = localStorage.getItem("currentContext");
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            console.log("🔎 Đang phục hồi playlist từ search:", parsed);
+            return parsed.songs || null;
+        }
+}
+
+      return null;
+    } catch (e) {
+      console.error("❌ Error in fetchPlaylist:", e);
+      return null;
+    }
+  };
+
+  const init = async () => {
+    console.log("🟡 INIT audio manager...");
+
+    await GlobalAudioManager.loadInitialState(fetchPlaylist);
+
+    const current = GlobalAudioManager.getCurrentSong?.(); // nếu có getter
+    console.log("🎧 Current song after init:", current);
+
+    if (!current) {
+      console.log("⚠️ No current song — trying to restore from localStorage");
+      // gọi nếu bạn đã định nghĩa
+    } else {
+      console.log("✅ Already has a song — no need to restore");
+    }
+  };
+
+  init();
+}, [viewedUserId]);
+
 
   return (
     <Routes>
@@ -100,16 +221,65 @@ const App = () => {
         }
       />
       <Route path="/profile" element={<ProfileLayout />} />
-      <Route path="/ManagerSong" element={<ManagerSongLayout />} />
+      <Route path="/profile/:userId" element={<ProfileLayout />} />
+      <Route path="/ManagerSong" element={<ManagerSongLayout />}>
+        <Route index element={<div style={{ color: "white", padding: 32 }}>Chọn một bài hát để quản lý.</div>} />
+        <Route path=":trackId" element={<ManagerSongSection />} />
+      </Route>
       <Route path="/ManagerPlaylistLayout/:playlistId" element={<ManagerPlaylistLayout />} />
       <Route path="/stats/*" element={<StatsLayouts />} />
       <Route path="/upload/*" element={<UploadLayouts />} />
       <Route path="/listening/*" element={<ListeningLayouts />} />
       <Route path="/top-artists" element={<SeeMoreLayouts><TopArtistsLisPage /></SeeMoreLayouts>} />
       <Route path="/top-tracks" element={<SeeMoreLayouts><TopTracksLisPage /></SeeMoreLayouts>} />
-      <Route path="/top-genres" element={<SeeMoreLayouts><TopGenresLisPage /></SeeMoreLayouts>} />
+      {/* <Route path="/top-genres" element={<SeeMoreLayouts><TopGenresLisPage /></SeeMoreLayouts>} /> */}
       <Route path="/top-tracks-page" element={<SeeMoreLayouts><TopTracksPage /></SeeMoreLayouts>} />
       <Route path="/search" element={<SearchPage />} />
+
+      {/* Trang upload với Upload Layout */}
+      <Route path="/upload/*" element={<UploadLayouts />} />
+
+      {/* Trang listening với Listening Layout */}
+      <Route path="/listening/*" element={<ListeningLayouts />} />
+      {/* Các route bọc trong SeeMoreLayouts để sử dụng chung Nav */}
+      <Route path="/top-artists" element={<SeeMoreLayouts><TopArtistsLisPage /></SeeMoreLayouts>} />
+      <Route path="/top-tracks" element={<SeeMoreLayouts><TopTracksLisPage /></SeeMoreLayouts>} />
+      <Route path="/top-tracks-page" element={<SeeMoreLayouts><TopTracksPage /></SeeMoreLayouts>} />
+      <Route path="/search" element={<SearchPage />} />
+
+      <Route
+        path="/admin"
+        element={
+          <AdminLayout>
+            <Section_admin_profile />              {/* Trang mặc định */}
+          </AdminLayout>
+        }
+      /> 
+      <Route
+        path="/admin/lis_tracks"
+        element={
+          <AdminLayout>
+            <Section_admin />              {/* Trang mặc định */}
+          </AdminLayout>
+        }
+      />
+      <Route
+        path="/admin/tracks"
+        element={
+          <AdminLayout>
+            <Section_admin_tracks />       {/* Trang Bài hát chờ duyệt */}
+          </AdminLayout>
+        }
+      />
+      <Route
+        path="/admin/users"
+        element={
+          <AdminLayout>
+            <Section_admin_users />        {/* Trang Quản lý người dùng */}
+          </AdminLayout>
+        }
+      />
+
     </Routes>
   );
 };

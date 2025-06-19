@@ -1,4 +1,4 @@
-/* Sidebar.css */
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;700&display=swap');
 
 /* Sidebar container */
 .sidebar {
@@ -121,9 +121,10 @@
 .song_side h1,
 .song_side h2 {
     font-size: 30px;
-    font-weight: bold;
+   font-weight: 700;
     color: white;
     margin-left: 20px;
+      font-family: "Circular Std", "Spotify Circular", Arial, Helvetica, sans-serif;
 }
 
 /* Danh sách bài hát */
@@ -133,10 +134,16 @@
     overflow-x: auto;
     padding: 10px;
     margin-left: 30px;
+    overflow-y: hidden  ;
+    scrollbar-width: none; 
+}
+.song-list::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Edge */
 }
 
+
 /* Mỗi bài hát */
-.song-item {
+.song-item-section {
     background: none;
     border: none;
     padding: 0;
@@ -149,38 +156,96 @@
     gap: 5px;
 }
 /* Default ảnh bài hát (vuông) */
-.song-item img {
+.song-item-section img {
     width: 200px;
     height: 200px;
     object-fit: cover;
     border-radius: 8px;
 }
+.song-image-wrapper {
+position: relative;
+  
+}
+
+
+
+.play-button-section {
+  position: absolute;
+  bottom: 8px;
+  right: 10px;
+  background-color: #1db954; /* Spotify xanh lá */
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 2;
+  transition: transform 0.2s ease;
+  opacity: 0;
+}.song-image-wrapper:hover .play-button-section {
+  opacity: 1;
+}
+.play-button-section i {
+  font-size: 16px;
+  color: white;
+}
+
+
+
+.play-button-section {
+  transform: scale(1.1);
+}
 
 /* Riêng phần Recently released: hình tròn */
-.song-list-circle .song-item img {
+.song-list-circle .song-item-section img {
     border-radius: 50%; /* chuyển thành hình tròn */
     width: 100px;
     height: 100px;
 }
 
 /* Tiêu đề bài hát */
-.song-item .title {
+.song-item-section {
+  width: 200px;       /* hoặc 200px tùy ý */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  background: transparent;
+  border: none;
+}
+.song-item-section .title {
+     font-family: 'Poppins', Arial, Helvetica, sans-serif;
     font-size: 18px;
     font-weight: bold;
+     white-space: nowrap;        /* Không xuống dòng */
+  overflow: hidden;           /* Ẩn phần tràn ra */
+  text-overflow: ellipsis;    /* Hiển thị "..." */
+  max-width: 100%;            /* Giới hạn chiều ngang (hoặc bạn có thể đặt cụ thể như 200px) */
+  display: block;             /* Đảm bảo là khối để áp dụng các thuộc tính trên */
 }
+/* .song-item-section .title:hover {
+  overflow: visible;
+  white-space: normal;
+} */
 
 /* Tên nghệ sĩ */
-.song-item .artist {
+.song-item-section .artist {
     margin-top: 10px;
-    font-size: 14px;
-    color: #ccc;
+      font-family: 'Poppins', Arial, Helvetica, sans-serif;
+    font-size: 0.95rem;         /* hoặc 14px */
+    font-weight: 400;
+    color: #b3b3b3;
+    margin-top: 4px;
+    letter-spacing: 0;
 }
 
 /* Hover bài hát */
-.song-item:hover {
-    opacity: 0.85;
-    transform: scale(1.02);
-    transition: all 0.2s ease-in-out;
+.song-item-section:hover {
+   transform: scale(1.02);
+    box-shadow: 0 4px 24px 0 rgba(0,0,0,0.30);
+    transition: all 0.2s cubic-bezier(.19,1,.22,1);
 }
 
 /* ==== Tabs Playlists / Artists ==== */
@@ -240,7 +305,15 @@
     border-radius: 4px;
     object-fit: cover;
 }
-
+.sidebar .sidebar-list svg.playlist-cover {
+    width: 40px;
+    height: 40px;
+    display: block;
+    fill: white;
+    background-color: #333; /* tuỳ chọn */
+    border-radius: 4px;
+    padding: 6px; /* tuỳ chỉnh để icon gọn hơn */
+}
 /* Hình tròn cho artist */
 .sidebar .sidebar-list .artist-avatar {
     width: 40px;

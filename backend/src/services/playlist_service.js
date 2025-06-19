@@ -1,44 +1,70 @@
 import db from '../models/index.js';
-import { Op } from 'sequelize';
+import { indexPlaylist, deleteEntity } from './search_service.js';
+const getAllPlaylistsByUserId = async (userId, currentUserId) => {
+  try {
+    const isOwner = Number(userId) === Number(currentUserId); // 👈 So sánh người dùng
 
-const getAllPlaylistsByUserId = async (userId) => {
-    try {
-        const playlists = await db.Playlist.findAll({
-            where: { userId: userId },
-            include: [
-                {
-                    model: db.Track,
-                    attributes: ['id', 'trackUrl', 'imageUrl'],
-                    include: [
-                        {
-                            model: db.User,
-                            attributes: ['userName']
-                        },
-                        {
-                            model: db.Metadata,
-                            as: 'Metadatum', // QUAN TRỌNG: Dùng alias 'Metadatum' (số ít, viết hoa M)
-                                             // nếu Track.hasOne(models.Metadata) không có 'as'
-                                             // Hoặc dùng alias bạn đã đặt trong Track.hasOne(models.Metadata, { as: '...' })
-                            attributes: ['trackname', 'duration_ms'] // Các trường cần từ Metadata
-                        }
-                    ],
-                    
-                },
-                {
-                    model: db.User,
-                    attributes: ['userName']
-                }
-            ],
-        });
-        return playlists;
-    } catch (error) {
-        console.error('Error fetching playlists:', error);
-        throw error;
-    }
+    const playlists = await db.Playlist.findAll({
+      where: {
+        userId: userId,
+        ...(isOwner ? {} : { privacy: 'public' }) // 👈 Nếu không phải chủ sở hữu, chỉ thấy public
+      },
+      include: [
+         {
+            model: db.User,
+            attributes: ['id', 'Name'] 
+          },
+        {
+          model: db.Track,
+          attributes: ['id', 'trackUrl', 'imageUrl'],
+          include: [
+            {
+              model: db.User,
+              attributes: ['id', 'userName', 'Name']
+            },
+            {
+              model: db.Metadata,
+              attributes: ['trackname', 'duration_ms']
+            }
+          ],
+        }
+      ]
+    });
+
+    return playlists;
+  } catch (error) {
+    console.error('Error fetching playlists:', error);
+    throw error;
+  }
+};
+const getAllPublicPlaylists = async () => {
+  return await db.Playlist.findAll({
+    where: { privacy: 'public' },
+    include: [
+      {
+        model: db.User,
+        attributes: ['id', 'Name']
+      },
+      {
+        model: db.Track,
+        attributes: ['id', 'trackUrl', 'imageUrl'],
+        include: [
+          {
+            model: db.User,
+            attributes: ['id', 'userName', 'Name']
+          },
+          {
+            model: db.Metadata,
+            attributes: ['trackname', 'duration_ms']
+          }
+        ]
+      }
+    ]
+  });
 };
 
 const createPlaylist = async (userId, trackId) => {
-    let title, createDate, imageUrl;
+    let title, createDate, imageUrl, privacy;
     const playlistCount = await db.Playlist.count({
         where: { userId: userId }
     });
@@ -63,7 +89,7 @@ const createPlaylist = async (userId, trackId) => {
         }
     }
 
-    const newPlaylist = await db.Playlist.create({ userId, title, createDate, imageUrl });
+    const newPlaylist = await db.Playlist.create({ userId, title, createDate, imageUrl, privacy });
 
     if (trackId) {
         console.log(">>playlistId: ", newPlaylist.id);
@@ -73,6 +99,7 @@ const createPlaylist = async (userId, trackId) => {
             trackId: trackId
         });
     }
+    await indexPlaylist(newPlaylist);
 
     return newPlaylist;
 };
@@ -93,270 +120,124 @@ const createPlaylist = async (userId, trackId) => {
  * @returns {Promise<object>} Object playlist đã được cập nhật.
  * @throws {Error} Ném lỗi với statusCode (404, 403, 400, 500) nếu có lỗi.
  */
-const updatePlaylist = async (playlistId, userId, title, imageUrl) => { // <-- Thêm lại userId
-    // Validate input cơ bản
+const updatePlaylist = async (playlistId, userId, title, imageUrl, privacy) => {
     const numericPlaylistId = Number(playlistId);
-    // Thêm lại kiểm tra userId
-    if (isNaN(numericPlaylistId) || !userId) {
-        const error = new Error("Dữ liệu không hợp lệ (playlistId hoặc userId)."); // <-- Sửa lại thông báo lỗi
-        error.statusCode = 400;
-        throw error;
-    }
-    // Validation cho title
-    if (typeof title !== 'string' || title.trim() === '') {
-         const error = new Error("Tiêu đề playlist không được để trống.");
-         error.statusCode = 400;
-         throw error;
-    }
-     // Validation cho imageUrl
-    if (imageUrl !== null && typeof imageUrl !== 'string') {
-         const error = new Error("Định dạng imageUrl không hợp lệ.");
-         error.statusCode = 400;
-         throw error;
-    }
 
-
-    try {
-        // --- BƯỚC 1: Tìm playlist và kiểm tra quyền sở hữu ---
-        // Sử dụng findOne với cả id và userId
-        console.log(`[Service] Finding playlist ${numericPlaylistId} for update by user ${userId}`);
-        const playlistToUpdate = await db.Playlist.findOne({ // <-- Dùng findOne
-            where: {
-                id: numericPlaylistId,
-                userId: userId // <-- Thêm lại kiểm tra userId (sử dụng đúng tên cột 'userId')
-            }
-        });
-
-        // --- BƯỚC 2: Xử lý nếu không tìm thấy hoặc không có quyền ---
-        if (!playlistToUpdate) {
-            // Kiểm tra xem playlist có tồn tại nhưng không thuộc user này không
-            console.log(`[Service] Playlist ${numericPlaylistId} not found or user ${userId} does not own it. Checking existence with findByPk...`); // Log trước khi kiểm tra
-            
-            console.log(`[Service] About to execute findByPk(${numericPlaylistId})`);
-
-            const exists = await db.Playlist.findByPk(numericPlaylistId);
-            // --- THÊM LOG KẾT QUẢ findByPk ---
-            console.log(`[Service] Result of findByPk(${numericPlaylistId}):`, exists ? `Found (ID: ${exists.id})` : 'Not Found (null)');
-            // ---------------------------------
-            if (exists) {
-                // Playlist tồn tại nhưng userId không khớp -> Lỗi quyền
-                console.warn(`[Service] Permission denied for user ${userId} to update playlist ${numericPlaylistId}`);
-                const error = new Error('Permission denied'); // Không có quyền
-                error.statusCode = 403; // <-- Trả về lỗi 403
-                throw error;
-            } else {
-                // Playlist không tồn tại (findByPk trả về null)
-                console.warn(`[Service] Playlist ${numericPlaylistId} not found for update (confirmed by findByPk).`); // Log rõ hơn
-                const error = new Error('Playlist not found'); // Không tìm thấy
-                error.statusCode = 404; // <-- Trả về lỗi 404
-                throw error;
-            }
-        }
-
-        // --- BƯỚC 3: Thực hiện cập nhật ---
-        console.log(`[Service] Updating playlist ${numericPlaylistId} with title: "${title}", imageUrl: "${imageUrl}"`);
-        // Chỉ cập nhật các trường được phép
-        await playlistToUpdate.update({
-             title: title,
-             imageUrl: imageUrl // Cập nhật imageUrl (có thể là null)
-        });
-
-        // --- BƯỚC 4: Trả về playlist đã cập nhật ---
-        // playlistToUpdate đã được cập nhật tại chỗ bởi lệnh update()
-        console.log(`[Service] Playlist ${numericPlaylistId} updated successfully by user ${userId}.`);
-        return playlistToUpdate; // Trả về đối tượng đã cập nhật
-
-    } catch (error) {
-        // Bắt các lỗi khác (ví dụ: lỗi database khi update)
-        console.error(`[Service] Error updating playlist ${playlistId} by user ${userId}:`, error); // Thêm userId vào log lỗi
-        if (!error.statusCode) {
-            error.statusCode = 500; // Lỗi server mặc định
-        }
-        throw error; // Ném lại lỗi để controller xử lý
-    }
-};
-
-
-const deletePlaylist = async (playlistId, userId) => {
-    // Validate input (đảm bảo ID là số hợp lệ)
-    const numericPlaylistId = Number(playlistId);
+    // Validate playlistId và userId
     if (isNaN(numericPlaylistId) || !userId) {
         const error = new Error("Dữ liệu không hợp lệ (playlistId hoặc userId).");
         error.statusCode = 400;
         throw error;
     }
 
-    // Sử dụng transaction để đảm bảo cả hai thao tác xóa đều thành công hoặc thất bại cùng nhau
-    const t = await db.sequelize.transaction(); // <-- Bắt đầu transaction
+    // Validate title
+    if (typeof title !== 'string' || title.trim() === '') {
+        const error = new Error("Tiêu đề playlist không được để trống.");
+        error.statusCode = 400;
+        throw error;
+    }
+
+    // Validate imageUrl (nếu không undefined)
+    if (imageUrl !== undefined && imageUrl !== null && typeof imageUrl !== 'string') {
+        const error = new Error("Định dạng imageUrl không hợp lệ.");
+        error.statusCode = 400;
+        throw error;
+    }
+
+    // Validate privacy
+    if (privacy !== undefined && privacy !== 'public' && privacy !== 'private') {
+        const error = new Error("Giá trị privacy không hợp lệ.");
+        error.statusCode = 400;
+        throw error;
+    }
 
     try {
-        // --- BƯỚC 1: Kiểm tra sự tồn tại và quyền sở hữu của Playlist ---
-        console.log(`[Service] Checking ownership for playlist ${numericPlaylistId}, user ${userId}`);
-        const playlistToDelete = await db.Playlist.findOne({
+        console.log(`[Service] Finding playlist ${numericPlaylistId} for update by user ${userId}`);
+        const playlistToUpdate = await db.Playlist.findOne({
             where: {
-                id: numericPlaylistId, // Giả sử cột ID trong Playlist là 'id'
-                // --- SỬA TÊN CỘT Ở ĐÂY ---
-                // Sử dụng tên cột 'userId' (viết hoa I) như trong schema DB
+                id: numericPlaylistId,
                 userId: userId
-                // -------------------------
-            },
-            transaction: t // Thực hiện trong transaction
+            }
         });
 
-        // Nếu không tìm thấy playlist hoặc không đúng chủ sở hữu
-        if (!playlistToDelete) {
-            // Kiểm tra xem playlist có tồn tại nhưng không thuộc user này không
-            const exists = await db.Playlist.findByPk(numericPlaylistId, { transaction: t });
+        if (!playlistToUpdate) {
+            const exists = await db.Playlist.findByPk(numericPlaylistId);
             if (exists) {
-                console.warn(`[Service] Permission denied for user ${userId} on playlist ${numericPlaylistId}`);
-                const error = new Error('Permission denied'); // Không có quyền
+                const error = new Error('Permission denied');
                 error.statusCode = 403;
-                throw error; // Lỗi sẽ được bắt và rollback ở catch
+                throw error;
             } else {
-                console.warn(`[Service] Playlist ${numericPlaylistId} not found`);
-                const error = new Error('Playlist not found'); // Không tìm thấy
+                const error = new Error('Playlist not found');
                 error.statusCode = 404;
-                throw error; // Lỗi sẽ được bắt và rollback ở catch
+                throw error;
             }
         }
 
-        // --- BƯỚC 2: Xóa các liên kết trong PlaylistTrack TRƯỚC ---
-        console.log(`[Service] Deleting PlaylistTrack entries for playlist ${numericPlaylistId}`);
-        await db.PlaylistTrack.destroy({
-            where: {
-                // --- SỬA TÊN CỘT Ở ĐÂY ---
-                // Sử dụng tên cột 'playlistId' (viết hoa I) như trong schema DB
-                playlistId: numericPlaylistId
-                // -------------------------
-            },
-            transaction: t // Thực hiện trong transaction
-        });
+        // Chuẩn bị dữ liệu cập nhật
+        const updateData = {
+            title: title.trim()
+        };
 
-        // --- BƯỚC 3: Xóa bản ghi Playlist ---
-        console.log(`[Service] Deleting Playlist ${numericPlaylistId}`);
-        // Không cần `where` nữa vì đã tìm thấy và kiểm tra quyền ở Bước 1
-        // Chỉ cần destroy đối tượng đã tìm thấy
-        await playlistToDelete.destroy({ transaction: t });
-
-        // --- BƯỚC 4: Commit Transaction ---
-        await t.commit(); // Hoàn tất transaction nếu mọi thứ thành công
-        console.log(`[Service] Playlist ${numericPlaylistId} deleted successfully.`);
-
-    } catch (error) {
-        // Nếu có lỗi, rollback transaction
-        console.error(`[Service] Error deleting playlist ${numericPlaylistId}:`, error);
-        // Đảm bảo rollback chỉ được gọi một lần và khi transaction còn hoạt động
-        if (t && !t.finished) { // Kiểm tra xem transaction đã kết thúc chưa
-             await t.rollback();
-             console.log(`[Service] Transaction rolled back for playlist ${numericPlaylistId}.`);
+        // Chỉ cập nhật imageUrl nếu truyền rõ (undefined = không cập nhật, null = xóa ảnh)
+        if (imageUrl !== undefined) {
+            updateData.imageUrl = imageUrl; 
         }
 
+        // Cập nhật privacy nếu có
+        if (privacy !== undefined) {
+            updateData.privacy = privacy;
+        }
 
-        // Ném lại lỗi để controller xử lý (giữ nguyên statusCode nếu có)
+        console.log(`[Service] Updating playlist ${numericPlaylistId} with data:`, updateData);
+
+        // Thực hiện cập nhật
+        await playlistToUpdate.update(updateData);
+
+        console.log(`[Service] Playlist ${numericPlaylistId} updated successfully by user ${userId}.`);
+        return playlistToUpdate;
+
+    } catch (error) {
+        console.error(`[Service] Error updating playlist ${playlistId} by user ${userId}:`, error);
         if (!error.statusCode) {
-            // Kiểm tra xem có phải lỗi từ DB không
-             if (error.name === 'SequelizeDatabaseError') {
-                 // Có thể đây là lỗi "Invalid column name" hoặc lỗi DB khác
-                 console.error("[Service] Database Error:", error.original?.message || error.message);
-                 // Không ghi đè statusCode nếu đã có
-                 if(!error.statusCode) error.statusCode = 500;
-             } else {
-                 error.statusCode = 500; // Lỗi server mặc định cho các lỗi khác
-             }
+            error.statusCode = 500;
         }
         throw error;
     }
 };
-/**
- * Lấy thông tin chi tiết một playlist bằng ID, bao gồm tracks và metadata (trackname).
- */
-// -------------------
-// const getPlaylistById = async (playlistId) => {
-//     const numericPlaylistId = Number(playlistId);
-//      if (isNaN(numericPlaylistId)) {
-//          console.error(`Invalid playlist ID received in getPlaylistById: ${playlistId}`);
-//          // Có thể throw lỗi thay vì return null để controller xử lý nhất quán
-//          throw new Error("Playlist ID không hợp lệ.");
-//          // return null;
-//      }
 
-//     try {
-//         // --- TRUY VẤN 1: Lấy Playlist và Tracks ---
-//         const playlistRaw = await db.Playlist.findByPk(numericPlaylistId, {
-//             include: [
-//                 {
-//                     model: db.Track,
-//                     attributes: ['id', 'trackUrl', 'imageUrl'],
-//                     through: { attributes: [] },
-//                     include: [
-//                         {
-//                             model: db.User, // User của Track
-//                             attributes: ['id', 'userName']
-//                         }
-//                     ]
-//                 },
-//                 {
-//                     model: db.User, // User của Playlist
-//                     attributes: ['id', 'userName']
-//                 }
-//             ],
-//         });
+const deletePlaylist = async (playlistId, userId) => {
+  const numericPlaylistId = Number(playlistId);
+  if (isNaN(numericPlaylistId) || !userId) {
+    const error = new Error("Dữ liệu không hợp lệ (playlistId hoặc userId).");
+    error.statusCode = 400;
+    throw error;
+  }
 
-//         if (!playlistRaw) return null; // Trả về null nếu không tìm thấy
+  // Kiểm tra quyền sở hữu playlist
+  const playlist = await db.Playlist.findOne({
+    where: {
+      id: numericPlaylistId,
+      userId: userId
+    }
+  });
 
-//         const playlist = playlistRaw.get({ plain: true });
+  if (!playlist) {
+    const exists = await db.Playlist.findByPk(numericPlaylistId);
+    const error = new Error(exists ? "Permission denied" : "Playlist not found");
+    error.statusCode = exists ? 403 : 404;
+    throw error;
+  }
 
-//         // --- Thu thập track IDs ---
-//         const trackIds = new Set();
-//         playlist.Tracks?.forEach(track => {
-//              if (track.id) {
-//                  trackIds.add(track.id);
-//              }
-//         });
+  // Gọi destroy trên đối tượng đã load – sẽ tự chạy hook afterDestroy
+  await playlist.destroy();
+  await deleteEntity('playlist', numericPlaylistId);
+  return true;
+};
 
-//         let metadataMap = new Map();
-
-//         // --- TRUY VẤN 2: Lấy Metadata ---
-//         if (trackIds.size > 0) {
-//              const metadataResults = await db.Metadata.findAll({
-//                  where: {
-//                      track_id: {
-//                          [Op.in]: Array.from(trackIds)
-//                      }
-//                  },
-//                  attributes: ['track_id', 'trackname'],
-//                  raw: true
-//              });
-//              metadataResults.forEach(meta => {
-//                  metadataMap.set(meta.track_id, meta.trackname);
-//              });
-//         }
-
-//         // --- Kết hợp dữ liệu ---
-//         playlist.Tracks?.forEach(track => {
-//              track.title = metadataMap.get(track.id) || "Unknown Title";
-//         });
-
-//         if (!playlist.Tracks) {
-//              playlist.Tracks = [];
-//         }
-
-//         return playlist;
-
-//     } catch (error) {
-//         console.error(`Error fetching playlist with ID ${numericPlaylistId}:`, error);
-//          if (error.sql) {
-//               console.error("Failed SQL:", error.sql);
-//          }
-//         throw error;
-//     }
-// };
-
-
-// ------------
 
 export {
     getAllPlaylistsByUserId,
+    getAllPublicPlaylists,
     createPlaylist,
     updatePlaylist,
     // getPlaylistById,

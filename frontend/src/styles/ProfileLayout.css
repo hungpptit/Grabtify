@@ -179,7 +179,7 @@ body.profile-page {
 
 .top_section {
     height: 50%; /* Chiều cao phần trên */
-    background-color: #454545;
+    background-color:transparent;
     display: flex;
     align-items: center; /* Căn giữa theo chiều dọc */
     justify-content: flex-start; /* Canh trái */
@@ -199,9 +199,16 @@ body.profile-page {
 .avatar:hover{
     transform: scale(1.1);
 }
+.avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover; /* Ảnh phủ đều khung tròn */
+    border-radius: 50%;
+}
 .profile_info {
     margin-left: 20px;
     color: white;
+    position: relative;
 }
 
 .profile_info span {
@@ -213,11 +220,37 @@ body.profile-page {
     font-size: 50px;
     font-weight: bold;
 }
+
+
+.profile_header {
+  display: flex;
+  align-items: center;
+  gap: 8px; /* khoảng cách giữa Hồ Sơ và icon */
+  
+}
+
+.edit_button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.edit_icon {
+  width: 18px;
+  height: 18px;
+  color: white;
+  opacity: 0.8;
+}
+
+.edit_button:hover .edit_icon {
+  opacity: 1;
+}
 .mid_section_profile {
     display: flex;
     align-items: center; /* Căn giữa theo chiều dọc */
     justify-content: space-between; /* Tabs bên trái, Stats bên phải */
-    background-color: #1F1F1F;
+    background-color: transparent;
     padding: 20px; /* Thêm padding cho dễ kiểm soát */
     position: relative;
     height: 80px; /* Đảm bảo có đủ không gian */
@@ -245,7 +278,7 @@ body.profile-page {
 .tab:hover {
     color: white;
 }
-.content {
+.page-content .content {
     display: none;
 }
 
@@ -329,9 +362,12 @@ body.profile-page {
     /* padding-top: 20px; */
 }
 .song_left {
-    display: flex;
-    align-items: center;
-    gap: 10px;
+      display: flex;
+    align-items: flex-start;    /* Căn top thay vì giữa */
+    gap: 0px;
+    /* margin-right: 2px; */
+    height: 120px;              /* vẫn giữ cho layout ổn định */
+    position: relative;
 }
 .album_cover {
     width: 80px;
@@ -355,7 +391,7 @@ body.profile-page {
     align-items: flex-start;
     gap: 8px;
     color: white;
-    margin-top: -5px;
+    margin-top: -40px;
     flex-wrap: wrap; /* Cho phép artist tự động xuống dòng */    
 }
 /* .more_options {
@@ -367,24 +403,24 @@ body.profile-page {
   color: white;
   z-index: 10;
 } */
-.song img{
+.song .album_cover{
     width: 100px;
     height: 100px;
 }
 
 /* Nút Play */
 .play_button {
-    background: none;
+    margin: 0 0 0 12px;
+    background: #232323;
     border: none;
-    cursor: pointer;
-    width: 30px;
-    height: 30px;
+    border-radius: 50%;
+    width: 46px;
+    height: 46px;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: transform 0.2s ease-in-out;
-    flex-shrink: 0; /* Giữ nút Play cố định */
-    margin-top: -75px;
+    transition: background 0.2s, transform 0.16s;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.13);
     
 }
 .play_button img {
@@ -627,6 +663,7 @@ body.profile-page {
     display: flex;
     gap: 20px;
     height: calc(100% - 40px); /* Account for action buttons height */
+    
   }
   
   .album-art {
@@ -679,6 +716,7 @@ body.profile-page {
     justify-content: space-between;
     align-items: center;
     margin-bottom: 0;
+    
   }
   
   .artist-name {
@@ -740,7 +778,7 @@ body.profile-page {
     padding-right: 10px;
   }
   
-  .track-item {
+  .track-item-profile {
     display: flex;
     align-items: center;
     padding: 8px 0;
@@ -750,15 +788,15 @@ body.profile-page {
     border-radius: 5px;
   }
   
-  .track-item:hover {
+  .track-item-profile:hover {
     background-color: #1F1F1F;
   }
   
-  .track-item.active {
+  .track-item-profile.active {
     background-color: #f2f2f2;
   }
   
-  .track-item.active .track-text {
+  .track-item-profile.active .track-text-profile {
     color: #f50;
     font-weight: 500;
   }
@@ -779,7 +817,7 @@ body.profile-page {
     margin-left: 5px;
   }
   
-  .track-content {
+  .track-content-playlist {
     display: flex;
     flex: 1;
     align-items: center;
@@ -787,7 +825,7 @@ body.profile-page {
     justify-content: space-between;
   }
   
-  .track-text {
+  .track-text-profile {
     flex: 1;
     font-size: 12px;
     color: white;
@@ -920,7 +958,7 @@ body.profile-page {
   user-select: none;
 }
 
-.dropdown_menu {
+.dropdown_menu_all {
   position: absolute;
   top: 28px;
   right: 0;
@@ -928,21 +966,200 @@ body.profile-page {
   border: 1px solid #555;
   border-radius: 6px;
   box-shadow: 0 2px 6px rgba(0,0,0,0.4);
-  overflow: hidden;
+  
   z-index: 30;
   min-width: 160px;
 }
+.dropdown_menu_all.drop-up {
+  top: auto;
+  bottom: 28px; 
+}
 
-.dropdown_item {
+
+.dropdown_item_all {
   white-space: nowrap;
   padding: 10px 16px;
-  color: white;
+   background-color: transparent;
+  color: #eee;
   font-size: 14px;
   cursor: pointer;
   transition: background-color 0.2s ease;
 }
 
-.dropdown_item:hover {
+.dropdown_item_all:hover {
   background-color: #333;
 }
+
+
+
+.dropdown_item_all.has-submenu {
+  position: relative;
+}
+
+.submenu_all {
+  display: block;
+  position: absolute;
+  top: 0;
+  right: 100%;
+  background-color: #2a2a2a;
+  border: 1px solid #555;
+  border-radius: 6px;
+  min-width: 160px;
+  z-index: 999;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  overflow-y: auto;
+  max-height: 200px;
+}
+/* Style từng item trong submenu */
+.submenu_item_all {
+  padding: 10px 16px;
+  white-space: nowrap;
+  color: #eee;
+  font-size: 14px;
+  background-color: transparent;
+  transition: background-color 0.2s ease;
+  cursor: pointer;
+}
+
+.submenu_item_all:hover {
+  background-color: #444;
+}
 /* ------------------------------------------------------ */
+
+
+/* ----phần like --------- */
+.song-image-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.play-button-like-profile {
+  position: absolute;
+  bottom: 8px;
+  right: 10px;
+  background-color: #1db954; /* Spotify xanh lá */
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 1;
+  opacity: 0;
+  transition: transform 0.2s ease;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%); /* Căn giữa */
+}
+
+.song-image-wrapper:hover .play-button-like-profile {
+  opacity: 1;
+}
+.play-button-like-profile i {
+  font-size: 16px;
+  color: white;
+}
+
+
+/* ------------------------ */
+.all-tracks-list .song {
+    display: flex;
+    align-items: center;    /* hoặc flex-start nếu muốn info trên cùng */
+    background: #333;
+    border: 1px solid rgba(255,255,255,0.09);
+    border-radius: 12px;
+    padding: 20px 22px;
+    margin-bottom: 20px;
+    color: white;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+    min-height: 180px;      /* bằng với .album_cover */
+    transition: background 0.15s;
+    position: relative;
+    height: auto;
+}
+.all-tracks-list .song_left {
+    display: flex;
+    align-items: center;    /* căn giữa nút play với ảnh */
+    gap: 0px;
+    /* không cần height ở đây */
+    position: relative;
+}
+.all-tracks-list .album_cover {
+    width: 160px;
+    height: 160px;
+    border-radius: 12px;
+    object-fit: cover;
+    box-shadow: 0 0 10px rgba(0,0,0,0.12);
+    background: #232323;
+}
+
+.all-tracks-list .play_button {
+     margin: -100px 0 0 12px;
+    background: #232323;
+    border: none;
+    border-radius: 50%;
+    width: 46px;
+    height: 46px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s, transform 0.16s;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.13);
+
+}
+.all-tracks-list .play_button:hover {
+    background: #222c22;
+    transform: scale(1.16);
+}
+.all-tracks-list .play_button img {
+    width: 22px;
+    height: 22px;
+}
+
+.all-tracks-list .song_info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    color: white;
+    min-width: 0;
+}
+
+.all-tracks-list .song_title {
+    font-size: 22px;
+    color: white;
+    font-weight: 600;
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.all-tracks-list .artist {
+    font-size: 15px;
+    color: #b3b3b3;
+    margin-bottom: 0;
+}
+
+.all-tracks-list .audio {
+    min-height: 38px;
+    width: 90%;
+    margin-top: 4px;
+}
+
+/* Responsive */
+@media (max-width: 800px) {
+    .all-tracks-list .song {
+        flex-direction: column;
+        align-items: flex-start;
+        min-height: unset;
+        padding: 12px;
+    }
+    .all-tracks-list .album_cover {
+        margin-bottom: 10px;
+        margin-right: 0;
+        width: 90px;
+        height: 90px;
+    }
+    
+}
